@@ -1,65 +1,90 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Cafe Menu</title>
+    <title>Sharma Cafe - Menu</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { background-color: #fff8e1; font-family: Arial; margin: 0; padding: 20px; }
-        .container { max-width: 500px; margin: 0 auto; }
-        h1 { color: #e65100; text-align: center; }
-        .cafe-name { text-align: center; color: #5d4037; margin-bottom: 30px; }
-        .menu-item { 
-            background: white; padding: 15px; margin: 10px 0; border-radius: 10px; 
-            display: flex; justify-content: space-between; box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        body {
+            background-color: #fff8e1; 
+            font-family: Arial;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
         }
-        .item-name { font-weight: bold; font-size: 18px; }
-        .item-price { color: #e65100; font-weight: bold; font-size: 18px; }
-        .footer { text-align: center; margin-top: 40px; color: #888; font-size: 14px; }
+        .card {
+            background: white;
+            max-width: 400px;
+            margin: 20px auto;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #e65100; }
+        .menu-item {
+            background: #fff3e0;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 18px;
+        }
+        .price {
+            color: #e65100;
+            font-weight: bold;
+        }
+        .footer {
+            margin-top: 30px;
+            color: #666;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1 id="cafeName">Loading...</h1>
-        <div class="cafe-name">Digital Menu</div>
-        <div id="menuList"></div>
-        <div class="footer">Powered by Sharma Cafe</div>
+    <div class="card">
+        <h1>☕ Sharma Cafe</h1>
+        <p>Welcome! Aaj Ka Menu</p>
+        
+        <div id="menuList">
+            <p>Loading menu...</p>
+        </div>
+        
+        <div class="footer">
+            <p>Order ke liye counter pe sampark kare 🙏</p>
+        </div>
     </div>
 
     <script>
+        // 👇 YAHAN APNI 3 CHEEZ DAALNI HAI - Same as admin page
         const SUPABASE_URL = 'https://dvuosaxbenphiwqknwia.supabase.co'
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR2dW9zYXhiZW5waGl3cWtud2lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3Mzg0OTAsImV4cCI6MjA5NDMxNDQ5MH0.IqRBS68f3PFGi9mtlwRCmUeGB6999snjHSEtykraFJQ'
+        const CAFE_ID = 'b4e42238-a89a-4f2e-a4a6-8c82569f6495'
+        
         const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
         
-        // URL se cafe_id nikalo
-        const urlParams = new URLSearchParams(window.location.search);
-        const CAFE_ID = urlParams.get('cafe');
-        
         async function loadMenu() {
-            if(!CAFE_ID) {
-                document.getElementById('cafeName').innerText = 'Cafe Not Found'
+            const { data, error } = await db.from('menu_items').select('*').eq('cafe_id', CAFE_ID).order('id', { ascending: true })
+            
+            if (error) { 
+                document.getElementById("menuList").innerHTML = '<p>Menu load nahi hua</p>';
+                return 
+            }
+            
+            if(data.length == 0) {
+                document.getElementById("menuList").innerHTML = '<p>Menu abhi update ho raha hai</p>';
                 return
             }
             
-            // Cafe ka naam lao
-            const { data: cafeData } = await db.from('Cafes').select('cafe_name').eq('id', CAFE_ID).single()
-            if(cafeData) document.getElementById('cafeName').innerText = cafeData.cafe_name
-            
-            // Menu items lao
-            const { data: menuData, error } = await db.from('menu_items').select('*').eq('cafe_id', CAFE_ID)
-            if(error) { alert('Error: ' + error.message); return }
-            
-            const menuList = document.getElementById('menuList')
-            if(menuData.length == 0) {
-                menuList.innerHTML = '<p style="text-align:center">Menu abhi khali hai</p>'
-                return
-            }
-            
-            menuData.forEach(item => {
-                let div = document.createElement('div')
-                div.className = 'menu-item'
-                div.innerHTML = `<span class="item-name">${item.name}</span> <span class="item-price">₹${item.price}</span>`
-                menuList.appendChild(div)
+            document.getElementById("menuList").innerHTML = ''
+            data.forEach(item => {
+                let nayaItem = document.createElement("div");
+                nayaItem.className = "menu-item";
+                nayaItem.innerHTML = `
+                    <span>${item.name}</span> 
+                    <span class="price">₹${item.price}</span>
+                `;
+                document.getElementById("menuList").appendChild(nayaItem);
             })
         }
         
