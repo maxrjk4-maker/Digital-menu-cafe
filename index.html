@@ -1,11 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Sharma Cafe Menu</title>
+    <title>S Cafe Menu</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- 1. QR Library jodi -->
     <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
-    <!-- Supabase Library Jodi -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
@@ -41,6 +39,7 @@
             font-size: 16px;
             margin-top: 10px;
             width: 95%;
+            cursor: pointer;
         }
         #menuList {
             text-align: left;
@@ -49,20 +48,30 @@
         .menu-item {
             background: #fff3e0;
             padding: 10px;
-            margin: 5px 0;
+            margin: 8px 0;
             border-radius: 5px;
             display: flex;
             justify-content: space-between;
+            align-items: center;
         }
-        /* 2. QR ke liye style */
+        .item-info {
+            flex: 1;
+        }
+        .item-actions button {
+            width: auto;
+            padding: 6px 12px;
+            margin: 0 2px;
+            font-size: 14px;
+        }
+        .btn-delete { background: #d32f2f !important; }
+        .btn-edit { background: #1976d2 !important; }
+        .btn-green { background: #2e7d32 !important; }
+        .btn-cancel { background: #757575 !important; }
         #qrcode {
             margin: 20px auto;
             padding: 10px;
             background: white;
             width: fit-content;
-        }
-        .btn-green {
-            background: #2e7d32 !important;
         }
         .link-text {
             font-size: 12px;
@@ -70,22 +79,33 @@
             margin-top: 10px;
             word-break: break-all;
         }
+        #editMode {
+            background: #e3f2fd;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>Sharma Cafe Menu</h1>
-        <p>Item Jodo</p>
+        <h1>S Cafe Menu</h1>
+        <p>Item Jodo / Edit Karo</p>
+        
+        <div id="editMode">
+            <b>Edit Mode On</b>
+            <button class="btn-cancel" onclick="cancelEdit()">Cancel</button>
+        </div>
         
         <input type="text" id="itemName" placeholder="Item ka Naam: Chai">
         <input type="number" id="itemPrice" placeholder="Price: 20">
-        <button onclick="jodoItem()">Menu Mein Jodo</button>
+        <button id="mainBtn" onclick="jodoItem()">Menu Mein Jodo</button>
         
         <div id="menuList">
             <h3>Aaj Ka Menu:</h3>
         </div>
         
-        <!-- 3. QR Button + QR Dikhega yahan -->
         <button class="btn-green" onclick="banaoQR()">Menu Ka QR Banao</button>
         <div id="qrcode"></div>
         <div id="qrLink" class="link-text"></div>
@@ -99,12 +119,12 @@
         
         const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
         
-        // Menu ka data store karne ke liye
         let menuData = [];
+        let editItemId = null; // Edit ke liye
         
-        // Page load hote hi DB se menu load karo
+        // Menu load karo
         async function loadMenuFromDB() {
-            const { data, error } = await db.from('menu_items').select('*').eq('cafe_id', CAFE_ID)
+            const { data, error } = await db.from('menu_items').select('*').eq('cafe_id', CAFE_ID).order('id', { ascending: true })
             if (error) { 
                 alert('Menu load karne mein error: ' + error.message); 
                 return 
@@ -114,11 +134,20 @@
             data.forEach(item => {
                 let nayaItem = document.createElement("div");
                 nayaItem.className = "menu-item";
-                nayaItem.innerHTML = `<span>${item.name}</span> <span>₹${item.price}</span>`;
+                nayaItem.innerHTML = `
+                    <div class="item-info">
+                        <b>${item.name}</b> - ₹${item.price}
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn-edit" onclick="editShuru(${item.id}, '${item.name}', ${item.price})">Edit</button>
+                        <button class="btn-delete" onclick="deleteItem(${item.id})">Delete</button>
+                    </div>
+                `;
                 document.getElementById("menuList").appendChild(nayaItem);
             })
         }
         
+        // Item add ya update karo
         async function jodoItem() {
             let naam = document.getElementById("itemName").value;
             let daam = document.getElementById("itemPrice").value;
@@ -128,47 +157,81 @@
                 return;
             }
             
-            // Supabase mein save karo
-            const { error } = await db.from('menu_items').insert([{ cafe_id: CAFE_ID, name: naam, price: daam }])
-            if (error) { 
-                alert('Item add karne mein error: ' + error.message); 
-                return 
+            if(editItemId) {
+                // UPDATE KARO
+                const { error } = await db.from('menu_items').update({ name: naam, price: daam }).eq('id', editItemId)
+                if (error) { 
+                    alert('Update karne mein error: ' + error.message); 
+                    return 
+                }
+                cancelEdit();
+            } else {
+                // NAYA ADD KARO
+                const { error } = await db.from('menu_items').insert([{ cafe_id: CAFE_ID, name: naam, price: daam }])
+                if (error) { 
+                    alert('Item add karne mein error: ' + error.message); 
+                    return 
+                }
             }
             
-            // DB se dobara load karo taaki ID mil jaye
             loadMenuFromDB()
-            
             document.getElementById("itemName").value = "";
             document.getElementById("itemPrice").value = "";
         }
         
-        // 4. QR Banane ka function - UPDATED
+        // Delete function
+        async function deleteItem(id) {
+            if(!confirm("Pakka delete karna hai?")) return;
+            
+            const { error } = await db.from('menu_items').delete().eq('id', id)
+            if (error) { 
+                alert('Delete karne mein error: ' + error.message); 
+                return 
+            }
+            loadMenuFromDB()
+        }
+        
+        // Edit mode chalu karo
+        function editShuru(id, name, price) {
+            editItemId = id;
+            document.getElementById("itemName").value = name;
+            document.getElementById("itemPrice").value = price;
+            document.getElementById("mainBtn").innerText = "Update Karo";
+            document.getElementById("editMode").style.display = "block";
+            window.scrollTo(0, 0); // Upar le jao
+        }
+        
+        // Edit cancel karo
+        function cancelEdit() {
+            editItemId = null;
+            document.getElementById("itemName").value = "";
+            document.getElementById("itemPrice").value = "";
+            document.getElementById("mainBtn").innerText = "Menu Mein Jodo";
+            document.getElementById("editMode").style.display = "none";
+        }
+        
+        // QR Banane ka function - Ab sahi link
         function banaoQR() {
             if(menuData.length == 0) {
                 alert("Pehle menu mein item to jodo bhai");
                 return;
             }
             
-            // Ye line change ki hai - Ab sahi link banega
-            const currentPath = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
-            const menuURL = currentPath + 'menu.html?cafe=' + CAFE_ID;
+            // Teri site ka sahi link - menu.html ki jarurat nahi
+            const menuURL = 'https://digital-menu-cafe.netlify.app';
             
-            // Purana QR saaf karo
             document.getElementById("qrcode").innerHTML = "";
             document.getElementById("qrLink").innerHTML = "";
             
-            // Naya QR banao
             new QRCode(document.getElementById("qrcode"), {
                 text: menuURL,
                 width: 200,
                 height: 200,
             });
             
-            // Link bhi niche dikha do testing ke liye
             document.getElementById("qrLink").innerHTML = `Link: <a href="${menuURL}" target="_blank">${menuURL}</a>`;
         }
         
-        // Page khulte hi menu load kar do
         loadMenuFromDB()
     </script>
 </body>
