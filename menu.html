@@ -6,7 +6,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         body {
-            background-color: #0000FF; 
+            background: #1565C0;
             font-family: Arial;
             text-align: center;
             margin: 0;
@@ -18,81 +18,136 @@
             margin: 20px auto;
             padding: 20px;
             border-radius: 10px;
-            box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
         }
-        h1 { color: #00008B; }
+        h1 { 
+            color: #0D47A1; 
+            margin: 0;
+            font-size: 28px;
+        }
+        .subtitle {
+            color: #333;
+            margin: 10px 0 20px 0;
+            font-size: 16px;
+        }
+        #menuList {
+            text-align: left;
+            margin-top: 10px;
+        }
         .menu-item {
-    background: linear-gradient(135deg, #FFFFFF 0%, #90CAF9 100%); /* White se Blue gradient */
-    color: #0D47A1; /* Text Dark Blue kar de, black ki jagah */
-    padding: 15px;
-    margin: 10px 0;
-    border-radius: 8px;
-    display: flex;
-    justify-content: space-between;
-    font-size: 18px;
-    font-weight: 600;
-    border: 1px solid #64B5F6; /* Halka blue border */
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.price {
-    color: #0D47A1; /* Price bhi dark blue */
-    font-weight: bold;
-}
+            background: linear-gradient(135deg, #FFFFFF 0%, #90CAF9 100%);
+            color: #0D47A1;
+            padding: 15px;
+            margin: 8px 0;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 16px;
+            border: 1px solid #BBDEFB;
+        }
+        .item-name {
+            font-weight: bold;
+        }
+        .item-price {
+            font-weight: bold;
+        }
+        .category-header {
+            background: #0D47A1;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 15px 0 8px 0;
+            font-weight: bold;
+            text-align: left;
+            font-size: 16px;
+        }
+        .category-header:first-child {
+            margin-top: 0;
+        }
+        .loading {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+        }
+        .empty {
+            text-align: center;
+            padding: 30px;
+            color: #999;
+        }
         .footer {
-            margin-top: 30px;
+            text-align: center;
             color: #666;
             font-size: 14px;
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
     <div class="card">
         <h1>☕ S Cafe</h1>
-        <p>Welcome! Aaj Ka Menu</p>
+        <div class="subtitle">Welcome! Aaj Ka Menu</div>
         
         <div id="menuList">
-            <p>Loading menu...</p>
+            <div class="loading">Menu load ho raha hai...</div>
         </div>
         
         <div class="footer">
-            <p>Order ke liye counter pe sampark kare 🙏</p>
+            Order ke liye counter pe sampark kare 🙏
         </div>
     </div>
 
     <script>
-        // 👇 YAHAN APNI 3 CHEEZ DAALNI HAI - Same as admin page
+        // 👇 YAHAN APNI 3 CHEEZ DAALNI HAI
         const SUPABASE_URL = 'https://dvuosaxbenphiwqknwia.supabase.co'
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR2dW9zYXhiZW5waGl3cWtud2lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3Mzg0OTAsImV4cCI6MjA5NDMxNDQ5MH0.IqRBS68f3PFGi9mtlwRCmUeGB6999snjHSEtykraFJQ'
         const CAFE_ID = 'b4e42238-a89a-4f2e-a4a6-8c82569f6495'
         
         const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
         
+        // Menu Load Karo Category Ke Saath
         async function loadMenu() {
-            const { data, error } = await db.from('menu_items').select('*').eq('cafe_id', CAFE_ID).order('id', { ascending: true })
+            const { data, error } = await db.from('menu_items')
+                .select('*, categories(name)')
+                .eq('cafe_id', CAFE_ID)
+                .order('category_id')
+                .order('name')
+            
+            const menuList = document.getElementById("menuList")
             
             if (error) { 
-                document.getElementById("menuList").innerHTML = '<p>Menu load nahi hua</p>';
+                menuList.innerHTML = '<div class="empty">Menu load nahi hua</div>'
+                console.log('Error:', error.message)
                 return 
             }
             
-            if(data.length == 0) {
-                document.getElementById("menuList").innerHTML = '<p>Menu abhi update ho raha hai</p>';
+            if(!data || data.length == 0) {
+                menuList.innerHTML = '<div class="empty">Menu khali hai</div>'
                 return
             }
             
-            document.getElementById("menuList").innerHTML = ''
+            menuList.innerHTML = ''
+            let currentCatId = null
+            
             data.forEach(item => {
-                let nayaItem = document.createElement("div");
-                nayaItem.className = "menu-item";
-                nayaItem.innerHTML = `
-                    <span>${item.name}</span> 
-                    <span class="price">₹${item.price}</span>
-                `;
-                document.getElementById("menuList").appendChild(nayaItem);
+                // Nayi category ka header banao
+                if(item.category_id !== currentCatId) {
+                    currentCatId = item.category_id
+                    let catName = item.categories?.name || 'Other Items'
+                    menuList.innerHTML += `<div class="category-header">${catName}</div>`
+                }
+                
+                // Item dikhao
+                menuList.innerHTML += `
+                    <div class="menu-item">
+                        <div class="item-name">${item.name}</div>
+                        <div class="item-price">₹${item.price}</div>
+                    </div>
+                `
             })
         }
         
         loadMenu()
+        setInterval(loadMenu, 30000)
     </script>
 </body>
 </html>
