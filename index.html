@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>S Cafe Menu</title>
+    <title>S Cafe Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -22,7 +22,7 @@
             box-shadow: 0px 2px 10px rgba(0,0,0,0.1);
         }
         h1 { color: #e65100; }
-        input {
+        input, select {
             width: 90%;
             padding: 10px;
             margin: 8px 0;
@@ -67,6 +67,7 @@
         .btn-edit { background: #1976d2 !important; }
         .btn-green { background: #2e7d32 !important; }
         .btn-cancel { background: #757575 !important; }
+        .btn-blue { background: #1976d2 !important; }
         #qrcode {
             margin: 20px auto;
             padding: 10px;
@@ -86,21 +87,50 @@
             margin: 10px 0;
             display: none;
         }
+        .section {
+            border: 2px dashed #ddd;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .category-header {
+            background: #e65100;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>S Cafe Menu</h1>
-        <p>Item Jodo / Edit Karo</p>
+        <h1>S Cafe Admin</h1>
         
-        <div id="editMode">
-            <b>Edit Mode On</b>
-            <button class="btn-cancel" onclick="cancelEdit()">Cancel</button>
+        <!-- Category Section -->
+        <div class="section">
+            <h3>Category Manage Karo</h3>
+            <input type="text" id="categoryName" placeholder="Category Name: Drinks, Snacks">
+            <button class="btn-blue" onclick="jodoCategory()">Category Jodo</button>
         </div>
-        
-        <input type="text" id="itemName" placeholder="Item ka Naam: Chai">
-        <input type="number" id="itemPrice" placeholder="Price: 20">
-        <button id="mainBtn" onclick="jodoItem()">Menu Mein Jodo</button>
+
+        <!-- Item Section -->
+        <div class="section">
+            <h3>Item Jodo / Edit Karo</h3>
+            <div id="editMode">
+                <b>Edit Mode On</b>
+                <button class="btn-cancel" onclick="cancelEdit()">Cancel</button>
+            </div>
+            
+            <input type="text" id="itemName" placeholder="Item ka Naam: Chai">
+            <input type="number" id="itemPrice" placeholder="Price: 20">
+            <select id="itemCategory">
+                <option value="">Category Select Karo</option>
+            </select>
+            <button id="mainBtn" onclick="jodoItem()">Menu Mein Jodo</button>
+        </div>
         
         <div id="menuList">
             <h3>Aaj Ka Menu:</h3>
@@ -120,54 +150,136 @@
         const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
         
         let menuData = [];
-        let editItemId = null; // Edit ke liye
+        let editItemId = null;
         
-        // Menu load karo
+        // 1. Category Load Karo Dropdown Mein
+        async function loadCategories() {
+            const { data, error } = await db.from('categories').select('*').eq('cafe_id', CAFE_ID).order('name')
+            if (error) { 
+                console.log('Category load error:', error.message); 
+                return 
+            }
+            const select = document.getElementById("itemCategory")
+            select.innerHTML = '<option value="">Category Select Karo</option>'
+            data?.forEach(cat => {
+                select.innerHTML += `<option value="${cat.id}">${cat.name}</option>`
+            })
+        }
+        
+        // 2. Nayi Category Jodo
+        async function jodoCategory() {
+            let name = document.getElementById("categoryName").value
+            if(name == "") { 
+                alert("Category naam bhar bhai"); 
+                return 
+            }
+            
+            const { error } = await db.from('categories').insert([{ cafe_id: CAFE_ID, name: name }])
+            if (error) { 
+                alert('Category add karne mein error: ' + error.message); 
+                return 
+            }
+            
+            document.getElementById("categoryName").value = ""
+            loadCategories()
+            loadMenuFromDB()
+            alert("Category add ho gayi!")
+        }
+        
+        // 3. Category Delete Karo
+        async function deleteCategory(id) {
+            if(!confirm("Is category ke saare items bhi delete ho jayenge. Pakka?")) return
+            
+            // Pehle items delete karo
+            await db.from('menu_items').delete().eq('category_id', id)
+            // Fir category delete karo
+            const { error } = await db.from('categories').delete().eq('id', id)
+            if (error) { 
+                alert('Category delete karne mein error: ' + error.message); 
+                return 
+            }
+            
+            loadCategories()
+            loadMenuFromDB()
+        }
+        
+        // 4. Menu Load Karo Category Ke Saath
         async function loadMenuFromDB() {
-            const { data, error } = await db.from('menu_items').select('*').eq('cafe_id', CAFE_ID).order('id', { ascending: true })
+            const { data, error } = await db.from('menu_items')
+                .select('*, categories(name)')
+                .eq('cafe_id', CAFE_ID)
+                .order('category_id')
+                .order('name')
+            
             if (error) { 
                 alert('Menu load karne mein error: ' + error.message); 
                 return 
             }
+            
             menuData = data
-            document.getElementById("menuList").innerHTML = '<h3>Aaj Ka Menu:</h3>'
+            const menuList = document.getElementById("menuList")
+            menuList.innerHTML = '<h3>Aaj Ka Menu:</h3>'
+            
+            if(!data || data.length == 0) {
+                menuList.innerHTML += '<p>Menu khali hai</p>'
+                return
+            }
+            
+            let currentCatId = null
             data.forEach(item => {
-                let nayaItem = document.createElement("div");
-                nayaItem.className = "menu-item";
+                // Nayi category ka header banao
+                if(item.category_id !== currentCatId) {
+                    currentCatId = item.category_id
+                    let catName = item.categories?.name || 'No Category'
+                    menuList.innerHTML += `
+                        <div class="category-header">
+                            <b>${catName}</b>
+                            <button class="btn-delete" onclick="deleteCategory(${item.category_id})">Del Cat</button>
+                        </div>
+                    `
+                }
+                
+                // Item dikhao
+                let nayaItem = document.createElement("div")
+                nayaItem.className = "menu-item"
                 nayaItem.innerHTML = `
                     <div class="item-info">
                         <b>${item.name}</b> - ₹${item.price}
                     </div>
                     <div class="item-actions">
-                        <button class="btn-edit" onclick="editShuru(${item.id}, '${item.name}', ${item.price})">Edit</button>
+                        <button class="btn-edit" onclick="editShuru(${item.id}, '${item.name}', ${item.price}, ${item.category_id})">Edit</button>
                         <button class="btn-delete" onclick="deleteItem(${item.id})">Delete</button>
                     </div>
-                `;
-                document.getElementById("menuList").appendChild(nayaItem);
+                `
+                menuList.appendChild(nayaItem)
             })
         }
         
-        // Item add ya update karo
+        // 5. Item Add ya Update Karo
         async function jodoItem() {
-            let naam = document.getElementById("itemName").value;
-            let daam = document.getElementById("itemPrice").value;
+            let naam = document.getElementById("itemName").value
+            let daam = document.getElementById("itemPrice").value
+            let catId = document.getElementById("itemCategory").value
             
-            if(naam == "" || daam == "") {
-                alert("Bhai naam aur daam dono bhar");
-                return;
+            if(naam == "" || daam == "" || catId == "") {
+                alert("Bhai naam, daam aur category teeno bhar")
+                return
             }
             
             if(editItemId) {
                 // UPDATE KARO
-                const { error } = await db.from('menu_items').update({ name: naam, price: daam }).eq('id', editItemId)
+                const { error } = await db.from('menu_items')
+                    .update({ name: naam, price: daam, category_id: catId })
+                    .eq('id', editItemId)
                 if (error) { 
                     alert('Update karne mein error: ' + error.message); 
                     return 
                 }
-                cancelEdit();
+                cancelEdit()
             } else {
                 // NAYA ADD KARO
-                const { error } = await db.from('menu_items').insert([{ cafe_id: CAFE_ID, name: naam, price: daam }])
+                const { error } = await db.from('menu_items')
+                    .insert([{ cafe_id: CAFE_ID, name: naam, price: daam, category_id: catId }])
                 if (error) { 
                     alert('Item add karne mein error: ' + error.message); 
                     return 
@@ -175,13 +287,13 @@
             }
             
             loadMenuFromDB()
-            document.getElementById("itemName").value = "";
-            document.getElementById("itemPrice").value = "";
+            document.getElementById("itemName").value = ""
+            document.getElementById("itemPrice").value = ""
         }
         
-        // Delete function
+        // 6. Item Delete Karo
         async function deleteItem(id) {
-            if(!confirm("Pakka delete karna hai?")) return;
+            if(!confirm("Pakka delete karna hai?")) return
             
             const { error } = await db.from('menu_items').delete().eq('id', id)
             if (error) { 
@@ -191,47 +303,49 @@
             loadMenuFromDB()
         }
         
-        // Edit mode chalu karo
-        function editShuru(id, name, price) {
-            editItemId = id;
-            document.getElementById("itemName").value = name;
-            document.getElementById("itemPrice").value = price;
-            document.getElementById("mainBtn").innerText = "Update Karo";
-            document.getElementById("editMode").style.display = "block";
-            window.scrollTo(0, 0); // Upar le jao
+        // 7. Edit Mode Chalu Karo
+        function editShuru(id, name, price, catId) {
+            editItemId = id
+            document.getElementById("itemName").value = name
+            document.getElementById("itemPrice").value = price
+            document.getElementById("itemCategory").value = catId
+            document.getElementById("mainBtn").innerText = "Update Karo"
+            document.getElementById("editMode").style.display = "block"
+            window.scrollTo(0, 0)
         }
         
-        // Edit cancel karo
+        // 8. Edit Cancel Karo
         function cancelEdit() {
-            editItemId = null;
-            document.getElementById("itemName").value = "";
-            document.getElementById("itemPrice").value = "";
-            document.getElementById("mainBtn").innerText = "Menu Mein Jodo";
-            document.getElementById("editMode").style.display = "none";
+            editItemId = null
+            document.getElementById("itemName").value = ""
+            document.getElementById("itemPrice").value = ""
+            document.getElementById("mainBtn").innerText = "Menu Mein Jodo"
+            document.getElementById("editMode").style.display = "none"
         }
         
-        // QR Banane ka function - Ab sahi link
+        // 9. QR Banane ka function
         function banaoQR() {
             if(menuData.length == 0) {
-                alert("Pehle menu mein item to jodo bhai");
-                return;
+                alert("Pehle menu mein item to jodo bhai")
+                return
             }
             
-            // Teri site ka sahi link - menu.html ki jarurat nahi
-            const menuURL = 'https://digital-menu-cafe.netlify.app';
+            const menuURL = 'https://digital-menu-cafe.netlify.app'
             
-            document.getElementById("qrcode").innerHTML = "";
-            document.getElementById("qrLink").innerHTML = "";
+            document.getElementById("qrcode").innerHTML = ""
+            document.getElementById("qrLink").innerHTML = ""
             
             new QRCode(document.getElementById("qrcode"), {
                 text: menuURL,
                 width: 200,
                 height: 200,
-            });
+            })
             
-            document.getElementById("qrLink").innerHTML = `Link: <a href="${menuURL}" target="_blank">${menuURL}</a>`;
+            document.getElementById("qrLink").innerHTML = `Link: <a href="${menuURL}" target="_blank">${menuURL}</a>`
         }
         
+        // Page load pe sab load karo
+        loadCategories()
         loadMenuFromDB()
     </script>
 </body>
